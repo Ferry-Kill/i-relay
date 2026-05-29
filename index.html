@@ -346,11 +346,11 @@ function updateMaster(state) {
 // Heartbeat animation
 const flatLine = "M 0,40 L 200,40";
 
-function getWave(phase, amp) {
+function getWave(phase, amp, freq) {
   let d = "";
-  for (let x = 0; x <= 200; x += 5) {
+  for (let x = 0; x <= 200; x += 4) {
     const fade = Math.sin(x / 200 * Math.PI);
-    const y = 40 + Math.sin(phase + x * 0.04) * amp * fade;
+    const y = 40 + Math.sin(phase + x * freq) * amp * fade;
     d += (x === 0 ? "M " : " L ") + `${x},${y.toFixed(1)}`;
   }
   return d;
@@ -366,10 +366,11 @@ function startHeartbeat() {
     if (activeState.vib) maxIntensity = Math.max(maxIntensity, activeState.vib.intensity);
     if (activeState.suc) maxIntensity = Math.max(maxIntensity, activeState.suc.intensity);
     if (activeState.thr) maxIntensity = Math.max(maxIntensity, 5);
-    const speed = count > 0 ? 0.1 + count * 0.05 : 0.06;
-    const amp = count > 0 ? 5 + maxIntensity * 1.2 + count * 3 : 5;
+    const speed = count > 0 ? 0.12 + maxIntensity * 0.03 + count * 0.04 : 0.06;
+    const freq = count > 0 ? 0.04 + maxIntensity * 0.006 + count * 0.008 : 0.03;
+    const amp = count > 0 ? 8 + count * 4 : 5;
     wavePhase += speed;
-    line.setAttribute('d', getWave(wavePhase, amp));
+    line.setAttribute('d', getWave(wavePhase, amp, freq));
   }, 50);
 }
 
