@@ -448,9 +448,7 @@ function updateFuncDisplay(cmd, bytes) {
       activeState.vib = activeState.suc = activeState.thr = activeState.heat = null;
     }
   }
-  const anyActive = activeState.vib || activeState.suc || activeState.thr;
-  if (anyActive && !heartbeatInterval) startHeartbeat();
-  else if (!anyActive && heartbeatInterval) stopHeartbeat();
+  if (!heartbeatInterval) startHeartbeat();
 }
 
 async function toggleBLE() {
