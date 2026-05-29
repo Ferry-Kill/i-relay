@@ -1,10 +1,13 @@
 {
-  "name": "I - Killian's Relay",
+  "name": "I",
   "short_name": "I",
-  "start_url": ".",
+  "description": "I",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#1a1a2e",
-  "theme_color": "#e94560",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "icon-192.png",

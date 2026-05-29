@@ -1,3 +1,15 @@
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', () => self.clients.claim());
-self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
+const CACHE_NAME = 'i-relay-v1';
+const urlsToCache = ['./', './index.html', './icon-192.png', './icon-512.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(urlsToCache)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('fetch', e => {
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+});
