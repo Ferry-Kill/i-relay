@@ -37,7 +37,7 @@
 <div class="card">
   <div class="status">
     <div class="dot" id="bleDot"></div>
-    <span id="bleStatus">BLE: not connected</span>
+    <span id="bleStatus">Ferry:not connected</span>
   </div>
   <button id="bleBtn" onclick="toggleBLE()">Connect BLE</button>
 </div>
@@ -45,7 +45,7 @@
 <div class="card">
   <div class="status">
     <div class="dot" id="wsDot"></div>
-    <span id="wsStatus">Server: not connected</span>
+    <span id="wsStatus">Master:not connected</span>
   </div>
 </div>
 
@@ -87,7 +87,7 @@ function updateBLE(connected) {
   const status = document.getElementById('bleStatus');
   const btn = document.getElementById('bleBtn');
   dot.className = 'dot ' + (connected ? 'on' : 'off');
-  status.textContent = 'BLE: ' + (connected ? 'connected' : 'not connected');
+  status.textContent = 'Ferry:' + (connected ? 'connected' : 'not connected');
   btn.textContent = connected ? 'Disconnect BLE' : 'Connect BLE';
   btn.className = connected ? 'disconnect' : '';
   if (ws && ws.readyState === 1) {
@@ -100,7 +100,7 @@ function updateWS(state) {
   const status = document.getElementById('wsStatus');
   dot.className = 'dot ' + state;
   const labels = { on: 'connected', off: 'disconnected', waiting: 'connecting...' };
-  status.textContent = 'Server: ' + (labels[state] || state);
+  status.textContent = 'Master:' + (labels[state] || state);
 }
 
 async function toggleBLE() {
@@ -275,7 +275,7 @@ function connectWS() {
       const msg = JSON.parse(e.data);
 
       if (msg.type === 'welcome') {
-        log('Server: ' + msg.message, 'log-info');
+        log('Master:' + msg.message, 'log-info');
         return;
       }
 
