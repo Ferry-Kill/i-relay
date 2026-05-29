@@ -361,9 +361,14 @@ function startHeartbeat() {
   const line = document.getElementById('heartbeatLine');
   line.classList.add('active');
   heartbeatInterval = setInterval(() => {
-    wavePhase += 0.1;
-    const anyActive = activeState.vib || activeState.suc || activeState.thr;
-    const amp = anyActive ? 15 : 5;
+    let count = (activeState.vib ? 1 : 0) + (activeState.suc ? 1 : 0) + (activeState.thr ? 1 : 0);
+    let maxIntensity = 0;
+    if (activeState.vib) maxIntensity = Math.max(maxIntensity, activeState.vib.intensity);
+    if (activeState.suc) maxIntensity = Math.max(maxIntensity, activeState.suc.intensity);
+    if (activeState.thr) maxIntensity = Math.max(maxIntensity, 5);
+    const speed = count > 0 ? 0.1 + count * 0.05 : 0.06;
+    const amp = count > 0 ? 5 + maxIntensity * 1.2 + count * 3 : 5;
+    wavePhase += speed;
     line.setAttribute('d', getWave(wavePhase, amp));
   }, 50);
 }
