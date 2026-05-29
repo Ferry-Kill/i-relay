@@ -47,7 +47,7 @@ body {
   font-size: 3.2em;
   font-weight: 500;
   color: #e8d4d8;
-  margin-bottom: 35px;
+  margin-bottom: 50px;
   letter-spacing: 0.05em;
 }
 
@@ -67,10 +67,11 @@ body {
 .status-area {
   display: flex;
   gap: 30px;
-  margin-bottom: 30px;
+  margin-bottom: 40px;
   font-family: 'Caveat', cursive;
   font-size: 1.15em;
   letter-spacing: 0.05em;
+  cursor: pointer;
 }
 
 .status-item {
@@ -106,32 +107,14 @@ body {
   50% { opacity: 1; }
 }
 
-/* Connect button */
-.connect-btn {
-  padding: 14px 45px;
-  font-family: 'Caveat', cursive;
-  font-size: 1.35em;
-  letter-spacing: 0.1em;
-  border: none;
-  border-radius: 30px;
-  background: rgba(180, 100, 120, 0.2);
-  color: #e8d4d8;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  margin-bottom: 35px;
-}
-
-.connect-btn:active { transform: scale(0.98); }
-.connect-btn.connected { background: rgba(180, 100, 120, 0.25); }
-
 /* Heartbeat */
 .heartbeat-container {
-  width: 220px;
-  height: 80px;
+  width: 200px;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 35px;
+  margin-bottom: 40px;
 }
 
 .heartbeat-svg { width: 100%; height: 100%; }
@@ -154,8 +137,8 @@ body {
 /* Function indicators */
 .functions {
   display: flex;
-  gap: 20px;
-  margin-bottom: 35px;
+  gap: 24px;
+  margin-bottom: 40px;
 }
 
 .func-item {
@@ -201,11 +184,12 @@ body {
 
 /* Footer */
 .footer {
+  margin-top: 40px;
+  text-align: center;
   font-family: 'Caveat', cursive;
   font-size: 1.3em;
   letter-spacing: 0.1em;
-  color: rgba(232, 212, 216, 0.6);
-  margin-bottom: 20px;
+  color: #e8d4d8;
 }
 
 /* Log toggle */
@@ -260,22 +244,20 @@ body {
     </svg></span> F
   </div>
 
-  <div class="status-area">
-    <div class="status-item" id="ferryStatus">
-      <div class="status-dot" id="ferryDot"></div>
-      <span>Ferry</span>
-    </div>
+  <div class="status-area" onclick="toggleBLE()">
     <div class="status-item" id="masterStatus">
       <div class="status-dot" id="masterDot"></div>
       <span>Master</span>
     </div>
+    <div class="status-item" id="ferryStatus">
+      <div class="status-dot" id="ferryDot"></div>
+      <span>Ferry</span>
+    </div>
   </div>
 
-  <button id="bleBtn" class="connect-btn" onclick="toggleBLE()">Connect</button>
-
   <div class="heartbeat-container">
-    <svg class="heartbeat-svg" viewBox="0 0 220 60">
-      <path id="heartbeatLine" class="heartbeat-line" d="M 0,30 L 220,30"/>
+    <svg class="heartbeat-svg" viewBox="0 0 200 80">
+      <path id="heartbeatLine" class="heartbeat-line" d="M 0,40 L 200,40"/>
     </svg>
   </div>
 
@@ -302,7 +284,7 @@ body {
     </div>
   </div>
 
-  <div class="footer">Breathe.</div>
+  <div class="footer">Good Girl.</div>
 
   <div class="log-toggle" onclick="toggleLog()">· · ·</div>
   <div class="log-area" id="logArea">
@@ -347,14 +329,9 @@ function updateFerry(connected) {
   const item = document.getElementById('ferryStatus');
   dot.className = 'status-dot' + (connected ? ' on' : '');
   item.className = 'status-item' + (connected ? ' on' : '');
-  const btn = document.getElementById('bleBtn');
-  btn.textContent = connected ? 'Connected' : 'Connect';
-  btn.className = 'connect-btn' + (connected ? ' connected' : '');
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type: 'ble_status', status: connected ? 'connected' : 'disconnected' }));
   }
-  if (connected) startHeartbeat();
-  else stopHeartbeat();
 }
 
 function updateMaster(state) {
@@ -365,13 +342,14 @@ function updateMaster(state) {
 }
 
 // Heartbeat animation
-const flatLine = "M 0,30 L 220,30";
+const flatLine = "M 0,40 L 200,40";
 
 function getWave(phase, amp) {
-  let d = "M 0,30";
-  for (let x = 0; x <= 220; x += 10) {
-    const y = 30 + Math.sin(phase + x * 0.03) * amp;
-    d += ` L ${x},${y.toFixed(1)}`;
+  let d = "";
+  for (let x = 0; x <= 200; x += 5) {
+    const fade = Math.sin(x / 200 * Math.PI);
+    const y = 40 + Math.sin(phase + x * 0.04) * amp * fade;
+    d += (x === 0 ? "M " : " L ") + `${x},${y.toFixed(1)}`;
   }
   return d;
 }
@@ -381,12 +359,14 @@ function startHeartbeat() {
   const line = document.getElementById('heartbeatLine');
   line.classList.add('active');
   heartbeatInterval = setInterval(() => {
-    wavePhase += 0.08;
+    wavePhase += 0.12;
     const anyActive = activeState.vib || activeState.suc || activeState.thr;
-    const amp = anyActive ? 12 : 4;
-    const speed = anyActive ? 0.05 : 0.03;
-    line.setAttribute('d', getWave(wavePhase, amp));
-    wavePhase += speed;
+    const amp = anyActive ? 15 : 0;
+    if (amp > 0) {
+      line.setAttribute('d', getWave(wavePhase, amp));
+    } else {
+      line.setAttribute('d', flatLine);
+    }
   }, 50);
 }
 
@@ -464,6 +444,9 @@ function updateFuncDisplay(cmd, bytes) {
       activeState.vib = activeState.suc = activeState.thr = activeState.heat = null;
     }
   }
+  const anyActive = activeState.vib || activeState.suc || activeState.thr;
+  if (anyActive && !heartbeatInterval) startHeartbeat();
+  else if (!anyActive && heartbeatInterval) stopHeartbeat();
 }
 
 async function toggleBLE() {
