@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#e94560">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>I - BLE Relay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; min-height: 100vh; }
+  h1 { font-size: 1.4em; text-align: center; margin-bottom: 20px; color: #e94560; }
+  .card { background: #16213e; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .status { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.on { background: #4ecca3; }
+  .dot.off { background: #e94560; }
+  .dot.waiting { background: #f0a500; }
+  button { background: #e94560; color: white; border: none; border-radius: 8px; padding: 12px 24px; font-size: 1em; cursor: pointer; width: 100%; margin-top: 8px; }
+  button:disabled { opacity: 0.5; }
+  button.disconnect { background: #555; }
+  #log { font-family: monospace; font-size: 0.8em; background: #0f0f23; border-radius: 8px; padding: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .log-cmd { color: #e94560; }
+  .log-ok { color: #4ecca3; }
+  .log-info { color: #f0a500; }
+</style>
+</head>
+<body>
+<h1>I - Killian's Relay</h1>
+
+<div class="card">
+  <div class="status">
+    <div class="dot" id="bleDot"></div>
+    <span id="bleStatus">BLE: not connected</span>
+  </div>
+  <button id="bleBtn" onclick="toggleBLE()">Connect BLE</button>
+</div>
+
+<div class="card">
+  <div class="status">
+    <div class="dot" id="wsDot"></div>
+    <span id="wsStatus">Server: not connected</span>
+  </div>
+</div>
+
+<div class="card">
+  <button onclick="sendBLE([0x55,0x03,0x00,0x00,0x01,0x05,0x00])" style="background:#4ecca3">Test Vibrate</button>
+  <button onclick="sendBLE([0x55,0x03,0x00,0x00,0x00,0x00,0x00])" style="background:#555;margin-top:4px">Stop</button>
+</div>
+
+<div class="card">
+  <div id="log"></div>
+</div>
+
+<script>
+const RELAY_SERVER = 'wss://killian-i.duckdns.org:8443';
+const BLE_SERVICE = 0xFFE0;
+const BLE_WRITE_CHAR = 0xFFE1;
+const BLE_NOTIFY_CHAR = 0xFFE2;
+
+let bleDevice = null;
+let bleChar = null;
+let notifyChar = null;
+let ws = null;
+let wsReconnectTimer = null;
+let bleWriteBusy = false;
+let bleWriteQueue = [];
+
+function log(msg, cls = '') {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = cls;
+  const now = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  line.textContent = `[${now}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateBLE(connected) {
+  const dot = document.getElementById('bleDot');
+  const status = document.getElementById('bleStatus');
+  const btn = document.getElementById('bleBtn');
+  dot.className = 'dot ' + (connected ? 'on' : 'off');
+  status.textContent = 'BLE: ' + (connected ? 'connected' : 'not connected');
+  btn.textContent = connected ? 'Disconnect BLE' : 'Connect BLE';
+  btn.className = connected ? 'disconnect' : '';
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'ble_status', status: connected ? 'connected' : 'disconnected' }));
+  }
+}
+
+function updateWS(state) {
+  const dot = document.getElementById('wsDot');
+  const status = document.getElementById('wsStatus');
+  dot.className = 'dot ' + state;
+  const labels = { on: 'connected', off: 'disconnected', waiting: 'connecting...' };
+  status.textContent = 'Server: ' + (labels[state] || state);
+}
+
+async function toggleBLE() {
+  if (bleDevice && bleDevice.gatt.connected) {
+    bleDevice.gatt.disconnect();
+    bleChar = null;
+    notifyChar = null;
+    updateBLE(false);
+    log('BLE disconnected', 'log-info');
+    return;
+  }
+
+  try {
+    log('Requesting BLE device...', 'log-info');
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'SL' }],
+      optionalServices: [BLE_SERVICE]
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', () => {
+      bleChar = null;
+      notifyChar = null;
+      updateBLE(false);
+      log('BLE disconnected unexpectedly', 'log-cmd');
+      reconnectBLE();
+    });
+
+    log('Connecting GATT...', 'log-info');
+    const server = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService(BLE_SERVICE);
+    bleChar = await service.getCharacteristic(BLE_WRITE_CHAR);
+    const props = bleChar.properties;
+    log('Char props: write=' + props.write + ' writeNoResp=' + props.writeWithoutResponse, 'log-info');
+
+    try {
+      notifyChar = await service.getCharacteristic(BLE_NOTIFY_CHAR);
+      await notifyChar.startNotifications();
+      notifyChar.addEventListener('characteristicvaluechanged', (e) => {
+        const val = new Uint8Array(e.target.value.buffer);
+        const hex = Array.from(val).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        log('Notify: ' + hex, 'log-info');
+      });
+    } catch (e) {
+      log('Notify char not available: ' + e.message, 'log-info');
+    }
+
+    updateBLE(true);
+    log('BLE connected: ' + bleDevice.name, 'log-ok');
+    startSilentAudio();
+    requestWakeLock();
+  } catch (e) {
+    log('BLE error: ' + e.message, 'log-cmd');
+    updateBLE(false);
+  }
+}
+
+async function sendBLE(bytes) {
+  if (!bleChar) {
+    log('BLE not connected, dropping command', 'log-cmd');
+    return false;
+  }
+  return new Promise(resolve => {
+    bleWriteQueue.push({ bytes, resolve });
+    processQueue();
+  });
+}
+
+async function processQueue() {
+  if (bleWriteBusy || bleWriteQueue.length === 0) return;
+  bleWriteBusy = true;
+  const { bytes, resolve } = bleWriteQueue.shift();
+  try {
+    const data = new Uint8Array(bytes);
+    const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+    await bleChar.writeValueWithoutResponse(data);
+    log('Sent: ' + hex, 'log-ok');
+    resolve(true);
+  } catch (e) {
+    log('Write error: ' + e.message, 'log-cmd');
+    resolve(false);
+  }
+  bleWriteBusy = false;
+  setTimeout(processQueue, 100);
+}
+
+// --- Background keepalive: silent audio loop ---
+let audioCtx = null;
+function startSilentAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    log('Background keepalive: on', 'log-ok');
+  } catch (e) {
+    log('Audio keepalive failed: ' + e.message, 'log-info');
+  }
+}
+
+// --- Wake Lock ---
+let wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => {
+      log('Wake lock released', 'log-info');
+    });
+    log('Wake lock: on', 'log-ok');
+  } catch (e) {
+    log('Wake lock failed: ' + e.message, 'log-info');
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !wakeLock) {
+    requestWakeLock();
+  }
+});
+
+// --- BLE auto-reconnect ---
+let bleReconnecting = false;
+async function reconnectBLE() {
+  if (bleReconnecting || !bleDevice) return;
+  bleReconnecting = true;
+  log('BLE reconnecting...', 'log-info');
+  for (let i = 0; i < 5; i++) {
+    try {
+      const server = await bleDevice.gatt.connect();
+      const service = await server.getPrimaryService(BLE_SERVICE);
+      bleChar = await service.getCharacteristic(BLE_WRITE_CHAR);
+      try {
+        notifyChar = await service.getCharacteristic(BLE_NOTIFY_CHAR);
+        await notifyChar.startNotifications();
+        notifyChar.addEventListener('characteristicvaluechanged', (e) => {
+          const val = new Uint8Array(e.target.value.buffer);
+          const hex = Array.from(val).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          log('Notify: ' + hex, 'log-info');
+        });
+      } catch (e) {}
+      updateBLE(true);
+      log('BLE reconnected: ' + bleDevice.name, 'log-ok');
+      bleReconnecting = false;
+      return;
+    } catch (e) {
+      log('Reconnect attempt ' + (i+1) + ' failed', 'log-cmd');
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  log('BLE reconnect failed after 5 attempts', 'log-cmd');
+  bleReconnecting = false;
+}
+
+function connectWS() {
+  if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+
+  updateWS('waiting');
+  log('Connecting to server...', 'log-info');
+
+  ws = new WebSocket(RELAY_SERVER);
+
+  ws.onopen = () => {
+    updateWS('on');
+    log('Server connected', 'log-ok');
+  };
+
+  ws.onmessage = async (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+
+      if (msg.type === 'welcome') {
+        log('Server: ' + msg.message, 'log-info');
+        return;
+      }
+
+      if (msg.type === 'command' && Array.isArray(msg.bytes)) {
+        log('Command: ' + msg.description + ' bytes:' + JSON.stringify(msg.bytes), 'log-cmd');
+        const ok = await sendBLE(msg.bytes);
+        log('Result: ' + ok, 'log-info');
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'ack', ok, description: msg.description }));
+        }
+        return;
+      }
+    } catch (e) {
+      log('Parse error: ' + e.message, 'log-cmd');
+    }
+  };
+
+  ws.onclose = () => {
+    updateWS('off');
+    log('Server disconnected, reconnecting in 3s...', 'log-info');
+    wsReconnectTimer = setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+connectWS();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+log('I-Relay ready. Connect BLE to start.', 'log-info');
+</script>
+</body>
+</html>
