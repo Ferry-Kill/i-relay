@@ -63,14 +63,14 @@ body {
 
 .logo .heart svg { width: 100%; height: 100%; }
 
-/* Status area */
+/* Status area — aligns with K's connect-btn */
 .status-area {
   display: flex;
   gap: 30px;
   margin-bottom: 40px;
   font-family: 'Caveat', cursive;
-  font-size: 1.15em;
-  letter-spacing: 0.05em;
+  font-size: 1.4em;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
 
@@ -134,11 +134,13 @@ body {
   filter: drop-shadow(0 0 8px rgba(196, 154, 158, 0.5));
 }
 
-/* Function indicators */
+/* Function indicators — aligns with K's input area */
 .functions {
   display: flex;
-  gap: 24px;
-  margin-bottom: 40px;
+  gap: 28px;
+  width: 100%;
+  max-width: 300px;
+  justify-content: center;
 }
 
 .func-item {
@@ -359,14 +361,10 @@ function startHeartbeat() {
   const line = document.getElementById('heartbeatLine');
   line.classList.add('active');
   heartbeatInterval = setInterval(() => {
-    wavePhase += 0.12;
+    wavePhase += 0.1;
     const anyActive = activeState.vib || activeState.suc || activeState.thr;
-    const amp = anyActive ? 15 : 0;
-    if (amp > 0) {
-      line.setAttribute('d', getWave(wavePhase, amp));
-    } else {
-      line.setAttribute('d', flatLine);
-    }
+    const amp = anyActive ? 15 : 5;
+    line.setAttribute('d', getWave(wavePhase, amp));
   }, 50);
 }
 
@@ -605,6 +603,7 @@ function connectWS() {
 }
 
 connectWS();
+startHeartbeat();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
 </script>
 </body>
